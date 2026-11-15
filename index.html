@@ -562,7 +562,11 @@ function mkCh(o){
   return {name:o.title,kind:'ch',diff:o.diff,pts:D.pts,teaser:o.teaser,
     init:function(os){var st=baseState(os);applyPlan(st);if(o.faults)o.faults(st,os);st.startup=snap(st);return st;},
     groups:function(os){var C=os==='cx',T=o.tickets(os,C),sum=T.reduce(function(a,t){return a+(t.w||1);},0);
-      var gs=T.map(function(t,i){var id='k'+(i+1);return {id:id,tk:1,cfg:1,title:t.title,hint:C?t.cx:t.s,checks:[{id:id,label:t.label,pts:75*(t.w||1)/sum,f:t.f,d:t.d}]};});
+      /* t.sym : symptôme affiché tant que le ticket n'est pas résolu (le libellé technique donnerait la réponse).
+         Un ticket voilé est binaire : pas de progression partielle qui trahirait la cause. */
+      var gs=T.map(function(t,i){var id='k'+(i+1),V=!!t.sym,f=V?function(st,fl,cx){return t.f(st,fl,cx)>=1-1e-9?1:0;}:t.f;
+        return {id:id,tk:1,cfg:1,title:V?'Ticket '+(i+1)+' · '+t.sym:t.title,rt:V?t.title:null,hint:C?t.cx:t.s,
+          checks:[{id:id,label:V?'À diagnostiquer avec les show':t.label,rl:V?t.label:null,pts:75*(t.w||1)/sum,f:f,d:t.d}]};});
       gs.push({id:'safe',cfg:1,title:'Rester conforme au plan de référence',hint:'Comparer avec l\'onglet Mission : noms des VLAN, VLAN voix, ports PC / invités / téléphones, uplink, nom du switch, ports branchés actifs, aucun VLAN en trop.',
         checks:[{id:'safe',label:'Plan de référence respecté (contrôlé une fois les tickets résolus)',pts:15,stage:1,f:function(st,fl,cx){return cx.ticketsDone&&planCheck(st,o.spec||REF)?1:0;}}]});
       gs.push({id:'save',title:'Sauvegarder',hint:'<code>write memory</code>, une fois tout corrigé',
@@ -583,30 +587,30 @@ var CHALLENGES={
   faults:function(st){st.ports[3].shut=true;},
   story:function(os){return 'Lundi matin, le support reçoit un appel du cabinet. Le câble a déjà été testé par le client : il est bon.';},
   tickets:function(os,C){return [{ask:'« Le PC du bureau 3 n\'a plus de réseau depuis ce matin. »',sub:'Port '+pl(os,3),
-    title:'Ticket · Bureau 3 sans réseau',label:'Port '+pl(os,3)+' actif',f:function(st){return st.ports[3].shut?0:1;},
+    sym:'Bureau 3 sans réseau',title:'Ticket · Bureau 3 sans réseau',label:'Port '+pl(os,3)+' actif',f:function(st){return st.ports[3].shut?0:1;},
     cx:'<code>show interface brief</code> : le port est <b>down / Administratively down</b>. <code>interface 1/1/3</code> → <code>no shutdown</code>',
     s:'<code>show interfaces brief</code> : colonne <b>Enabled = No</b>. <code>interface 3</code> → <code>enable</code>'}];}}),
  'c-invite':mkCh({diff:1,title:'Un invité sur le réseau interne',teaser:'1 ticket · sécurité',
   faults:function(st,os){if(os==='cx')st.ports[10].access=10;else st.ports[10].u=10;},
   story:function(os){return 'Alerte du responsable informatique du client : un visiteur a pu parcourir le serveur de fichiers depuis la salle de réunion. Les invités ne doivent voir qu\'Internet (VLAN 20).';},
   tickets:function(os,C){return [{ask:'« Un visiteur branché sur la prise de la salle de réunion voit nos partages réseau. »',sub:'Port '+pl(os,10),
-    title:'Ticket · Prise invité dans le mauvais VLAN',label:'Port '+pl(os,10)+' untagged dans le VLAN 20',f:function(st){return untagOK(st,10,20);},
+    sym:'Un visiteur voit les partages',title:'Ticket · Prise invité dans le mauvais VLAN',label:'Port '+pl(os,10)+' untagged dans le VLAN 20',f:function(st){return untagOK(st,10,20);},
     cx:'<code>show interface brief</code> : le port 1/1/10 est en VLAN 10. <code>interface 1/1/10</code> → <code>vlan access 20</code>',
     s:'<code>show vlans ports 10 detail</code> : il est untagged en VLAN 10. <code>vlan 20</code> → <code>untagged 10</code>'}];}}),
  'c-tel':mkCh({diff:2,title:'Téléphones muets, bureaux 13 à 16',teaser:'1 ticket · VLAN voix sur une plage de ports',
   faults:function(st,os){range(13,16).forEach(function(p){var P=st.ports[p];if(os==='cx'){P.mode='access';P.access=10;P.native=1;P.allowed='all';}else P.t=[];});},
   story:function(os){return 'Un collègue a « remis à plat » quelques ports la semaine dernière. Depuis, une partie du plateau n\'a plus de téléphone.';},
   tickets:function(os,C){var ps=range(13,16);return [{ask:'« Les téléphones des bureaux 13 à 16 n\'ont plus de tonalité. Les PC branchés derrière fonctionnent. Les bureaux 17 à 20 n\'ont aucun souci. »',sub:'Ports '+pl(os,13,16),
-    title:'Ticket · Voix absente sur '+pl(os,13,16),label:'VLAN 10 untagged + VLAN 100 tagged',f:function(st){return avg(ps,function(p){return phoneOK(st,p);});},d:phDetail(ps),
+    sym:'Téléphones 13 à 16 sans tonalité',title:'Ticket · Voix absente sur '+pl(os,13,16),label:'VLAN 10 untagged + VLAN 100 tagged',f:function(st){return avg(ps,function(p){return phoneOK(st,p);});},d:phDetail(ps),
     cx:'Comparer avec un port qui marche : <code>show running-config interface 1/1/17</code>. Puis <code>interface 1/1/13-1/1/16</code> → <code>vlan trunk native 10</code> → <code>vlan trunk allowed 10,100</code>',
     s:'<code>show vlans ports 13 detail</code> vs <code>show vlans ports 17 detail</code>. Puis <code>vlan 100</code> → <code>tagged 13-16</code>'}];}}),
  'c-voix':mkCh({diff:2,title:'Le VLAN voix a perdu son identité',teaser:'2 tickets · nom et LLDP-MED',
   faults:function(st){st.vlans[100].name='TEST';st.vlans[100].voice=false;},
   story:function(os){return 'Le client a reçu des téléphones neufs. Branchés, ils restent dans le VLAN 10 au lieu de basculer seuls dans le VLAN voix : le switch ne l\'annonce plus en LLDP-MED.';},
   tickets:function(os,C){return [
-    {ask:'« Dans <code>show vlan'+(C?'':'s')+'</code>, le VLAN 100 porte un drôle de nom. »',title:'Ticket · Nom du VLAN 100',label:'VLAN 100 nommé VOIP',f:function(st){return vNm(st,100,'VOIP')?1:0;},
+    {ask:'« Dans <code>show vlan'+(C?'':'s')+'</code>, le VLAN 100 porte un drôle de nom. »',sym:'Nom bizarre du VLAN 100',title:'Ticket · Nom du VLAN 100',label:'VLAN 100 nommé VOIP',f:function(st){return vNm(st,100,'VOIP')?1:0;},
      cx:'<code>vlan 100</code> → <code>name VOIP</code>',s:'<code>vlan 100</code> → <code>name "VOIP"</code>'},
-    {ask:'« Les téléphones neufs ne récupèrent plus leur VLAN tout seuls. »',title:'Ticket · VLAN voix (LLDP-MED)',label:'VLAN 100 déclaré voice',f:function(st){return st.vlans[100]&&st.vlans[100].voice?1:0;},
+    {ask:'« Les téléphones neufs ne récupèrent plus leur VLAN tout seuls. »',sym:'Les téléphones neufs ne trouvent pas leur VLAN',title:'Ticket · VLAN voix (LLDP-MED)',label:'VLAN 100 déclaré voice',f:function(st){return st.vlans[100]&&st.vlans[100].voice?1:0;},
      cx:'<code>vlan 100</code> → <code>voice</code>',s:'<code>vlan 100</code> → <code>voice</code>'}];}}),
  'c-compta':mkCh({diff:2,title:'Nouveau service : la comptabilité',teaser:'3 tickets · demande de changement',
   spec:{names:{10:'DATA',20:'INVITE',30:'COMPTA',100:'VOIP'},voice:100,acc:accMap({10:[1,6],30:[7,8],20:[9,12]}),phones:PHONES,up:[10,20,30,100]},
@@ -633,18 +637,18 @@ var CHALLENGES={
      s:'<code>show vlans ports 24 detail</code>. Puis <code>vlan 999</code> → <code>no tagged 24</code> (ou supprimer le VLAN, ticket 2)'},
     {ask:'« Le VLAN de test 999 doit disparaître du switch. »',title:'Ticket · Supprimer le VLAN 999',label:'VLAN 999 supprimé',f:function(st){return vEx(st,999)?0:1;},
      cx:'Depuis le mode config : <code>no vlan 999</code>',s:'Depuis le mode config : <code>no vlan 999</code> (ses ports sont retirés au passage)'},
-    {ask:'« Le téléphone du bureau 18 ne marche pas, alors que ses voisins fonctionnent. »',sub:'Port '+pl(os,18),title:'Ticket · Téléphone du bureau 18',label:'Port '+pl(os,18)+' : 10 untagged + seulement 100 tagged',f:function(st){return phoneOK(st,18);},
+    {ask:'« Le téléphone du bureau 18 ne marche pas, alors que ses voisins fonctionnent. »',sub:'Port '+pl(os,18),sym:'Le téléphone du bureau 18 ne marche pas',title:'Ticket · Téléphone du bureau 18',label:'Port '+pl(os,18)+' : 10 untagged + seulement 100 tagged',f:function(st){return phoneOK(st,18);},
      cx:'<code>show running-config interface 1/1/18</code> : 999 au lieu de 100. <code>interface 1/1/18</code> → <code>no vlan trunk allowed 999</code> → <code>vlan trunk allowed 100</code>',
      s:'<code>show vlans ports 18 detail</code>. <code>vlan 100</code> → <code>tagged 18</code> (et le 999 part avec <code>no vlan 999</code>)'}];}}),
  'c-accueil':mkCh({diff:3,title:'Accueil et invités coupés du monde',teaser:'3 tickets · pannes cumulées',
   faults:function(st,os){if(os==='cx'){st.ports[UPL].allowed=[10,100];st.ports[9].routing=true;}else{st.ports[UPL].t=[10,100];st.ports[9].u=1;}st.ports[11].shut=true;},
   story:function(os){return 'Trois appels dans la même matinée, tous côté accueil et invités. Ils n\'ont peut-être pas la même cause : traiter chaque symptôme sans casser le reste.';},
   tickets:function(os,C){return [
-    {ask:'« Plus aucun invité n\'a Internet, quelle que soit la prise. »',title:'Ticket · Aucun invité n\'a Internet',label:'Uplink : 10, 20 et 100 tagged',f:function(st){return uplinkScore(st,UPL,[10,20,100])===1?1:0;},d:upDetail,
+    {ask:'« Plus aucun invité n\'a Internet, quelle que soit la prise. »',sym:'Aucun invité n\'a Internet',title:'Ticket · Aucun invité n\'a Internet',label:'Uplink : 10, 20 et 100 tagged',f:function(st){return uplinkScore(st,UPL,[10,20,100])===1?1:0;},d:upDetail,
      cx:'Le VLAN 20 ne passe plus vers le pare-feu. <code>interface 1/1/24</code> → <code>vlan trunk allowed 20</code>',s:'Le VLAN 20 n\'est plus tagged sur l\'uplink. <code>vlan 20</code> → <code>tagged 24</code>'},
-    {ask:'« À l\'accueil, même un PC filaire n\'obtient pas d\'adresse IP. »',sub:'Port '+pl(os,9),title:'Ticket · Prise de l\'accueil',label:'Port '+pl(os,9)+' untagged dans le VLAN 20',f:function(st){return untagOK(st,9,20);},
+    {ask:'« À l\'accueil, même un PC filaire n\'obtient pas d\'adresse IP. »',sub:'Port '+pl(os,9),sym:'Pas d\'adresse IP à l\'accueil',title:'Ticket · Prise de l\'accueil',label:'Port '+pl(os,9)+' untagged dans le VLAN 20',f:function(st){return untagOK(st,9,20);},
      cx:'Le port est <b>routé</b> (piège n°4). <code>interface 1/1/9</code> → <code>no routing</code> → <code>vlan access 20</code>',s:'Le port est retombé dans le VLAN 1. <code>vlan 20</code> → <code>untagged 9</code>'},
-    {ask:'« La prise à côté de l\'accueil n\'allume même pas la LED du PC. »',sub:'Port '+pl(os,11),title:'Ticket · Prise sans lien',label:'Port '+pl(os,11)+' actif',f:function(st){return st.ports[11].shut?0:1;},
+    {ask:'« La prise à côté de l\'accueil n\'allume même pas la LED du PC. »',sub:'Port '+pl(os,11),sym:'Prise sans LED près de l\'accueil',title:'Ticket · Prise sans lien',label:'Port '+pl(os,11)+' actif',f:function(st){return st.ports[11].shut?0:1;},
      cx:'<code>interface 1/1/11</code> → <code>no shutdown</code>',s:'<code>interface 11</code> → <code>enable</code>'}];}}),
  'c-chaos':mkCh({diff:4,title:'Le grand ménage du stagiaire',teaser:'pannes non listées · remise en conformité',
   faults:function(st,os){st.hostname='switch';st.vlans[10].name='POSTES';delete st.vlans[100];st.ports[17].shut=true;
@@ -654,17 +658,17 @@ var CHALLENGES={
   story:function(os){return 'Vendredi soir, un stagiaire a « fait du ménage » sur SW-ACCES. Lundi matin : téléphones morts, deux postes atterrissent sur le réseau invité, la supervision ne reconnaît plus le switch. <b>Personne ne sait ce qu\'il a touché.</b> Seule référence : le plan du client.';},
   cards:function(os){return [{ask:'Remettre SW-ACCES <b>entièrement conforme</b> au plan de référence ci-dessous, puis sauvegarder. Les pannes ne sont pas listées : à toi de les trouver avec les <code>show</code>.'}];},
   tickets:function(os,C){return [
-    {title:'Nom du switch',label:'Nom du switch conforme',f:function(st){return st.hostname==='SW-ACCES'?1:0;},cx:'La supervision cherche <b>SW-ACCES</b> : <code>hostname SW-ACCES</code>',s:'La supervision cherche <b>SW-ACCES</b> : <code>hostname SW-ACCES</code>'},
-    {title:'VLAN',label:'VLAN 10, 20, 100 bien nommés, 100 en voice',w:2,f:function(st){return (vNm(st,10,'DATA')&&vNm(st,20,'INVITE')&&vNm(st,100,'VOIP')&&st.vlans[100].voice)?1:0;},
+    {sym:'Écart au plan à trouver',title:'Nom du switch',label:'Nom du switch conforme',f:function(st){return st.hostname==='SW-ACCES'?1:0;},cx:'La supervision cherche <b>SW-ACCES</b> : <code>hostname SW-ACCES</code>',s:'La supervision cherche <b>SW-ACCES</b> : <code>hostname SW-ACCES</code>'},
+    {sym:'Écart au plan à trouver',title:'VLAN',label:'VLAN 10, 20, 100 bien nommés, 100 en voice',w:2,f:function(st){return (vNm(st,10,'DATA')&&vNm(st,20,'INVITE')&&vNm(st,100,'VOIP')&&st.vlans[100].voice)?1:0;},
      cx:'<code>show vlan</code> : le 10 est renommé et le 100 a disparu. <code>vlan 10</code> → <code>name DATA</code> ; <code>vlan 100</code> → <code>name VOIP</code> → <code>voice</code>',
      s:'<code>show vlans</code> : le 10 est renommé et le 100 a disparu. <code>vlan 10 name DATA</code> ; <code>vlan 100</code> → <code>name "VOIP"</code> → <code>voice</code>'},
-    {title:'Ports des PC',label:'Ports '+pl(os,1,8)+' en VLAN 10',f:function(st){return avg(range(1,8),function(p){return untagOK(st,p,10);});},d:function(st){return cnt(range(1,8),function(p){return untagOK(st,p,10);})+'/8';},
+    {sym:'Écart au plan à trouver',title:'Ports des PC',label:'Ports '+pl(os,1,8)+' en VLAN 10',f:function(st){return avg(range(1,8),function(p){return untagOK(st,p,10);});},d:function(st){return cnt(range(1,8),function(p){return untagOK(st,p,10);})+'/8';},
      cx:'<code>show interface brief</code> : deux ports sont en VLAN 20. <code>interface 1/1/1-1/1/2</code> → <code>vlan access 10</code>',s:'<code>show vlans 20</code> : deux ports n\'ont rien à y faire. <code>vlan 10</code> → <code>untagged 1-2</code>'},
-    {title:'Téléphones',label:'Ports '+pl(os,13,20)+' : 10 untagged + 100 tagged',w:2,f:function(st){return avg(PHONES,function(p){return phoneOK(st,p);});},d:phDetail(PHONES),
+    {sym:'Écart au plan à trouver',title:'Téléphones',label:'Ports '+pl(os,13,20)+' : 10 untagged + 100 tagged',w:2,f:function(st){return avg(PHONES,function(p){return phoneOK(st,p);});},d:phDetail(PHONES),
      cx:'Une fois le VLAN 100 recréé : <code>interface 1/1/13-1/1/20</code> → <code>vlan trunk allowed 100</code>',s:'Une fois le VLAN 100 recréé : <code>vlan 100</code> → <code>tagged 13-20</code>'},
-    {title:'Uplink',label:'Uplink : 10, 20 et 100 tagged',f:function(st){return uplinkScore(st,UPL,[10,20,100])===1?1:0;},d:upDetail,
+    {sym:'Écart au plan à trouver',title:'Uplink',label:'Uplink : 10, 20 et 100 tagged',f:function(st){return uplinkScore(st,UPL,[10,20,100])===1?1:0;},d:upDetail,
      cx:'<code>interface 1/1/24</code> → <code>vlan trunk allowed 100</code>',s:'<code>vlan 100</code> → <code>tagged 24</code>'},
-    {title:'Ports branchés',label:'Aucun port branché désactivé',f:function(st){return linkedUp(st)?1:0;},
+    {sym:'Écart au plan à trouver',title:'Ports branchés',label:'Aucun port branché désactivé',f:function(st){return linkedUp(st)?1:0;},
      cx:'<code>show interface brief</code> : un port de téléphone est <b>Administratively down</b>. <code>interface 1/1/17</code> → <code>no shutdown</code>',s:'<code>show interfaces brief</code> : un port a <b>Enabled = No</b>. <code>interface 17</code> → <code>enable</code>'}];}})
 };
 Object.keys(CHALLENGES).forEach(function(k){SC[k]=CHALLENGES[k];});
@@ -1135,8 +1139,8 @@ function fmtPts(x){var r=Math.round(x*10)/10;return (r%1===0?String(r):r.toFixed
 function rescore(silent){
   var R=evalAll(),prev=G.prev||{};
   if(!silent){var msgs=[];
-    R.gs.forEach(function(g){g.checks.forEach(function(k){var a=prev[k.id]||0,b=R.vals[k.id];if(Math.abs(b-a)<1e-9)return;var d=(b-a)*k.pts,det=k.d?' · '+k.d(G.st):'';
-      if(b>=1-1e-9&&a<1-1e-9)msgs.push(['ok','✓ '+k.label,'+'+fmtPts(d)]);else if(b>a)msgs.push(['up',k.label+det,'+'+fmtPts(d)]);else msgs.push(['down',k.label+det,'−'+fmtPts(-d)]);});});
+    R.gs.forEach(function(g){g.checks.forEach(function(k){var a=prev[k.id]||0,b=R.vals[k.id];if(Math.abs(b-a)<1e-9)return;var d=(b-a)*k.pts,det=kDet(k,b)?' · '+kDet(k,b):'';
+      if(b>=1-1e-9&&a<1-1e-9)msgs.push(['ok','✓ '+kLabel(k,b),'+'+fmtPts(d)]);else if(b>a)msgs.push(['up',kLabel(k,b)+det,'+'+fmtPts(d)]);else msgs.push(['down',kLabel(k,b)+det,'−'+fmtPts(-d)]);});});
     msgs.slice(0,4).forEach(toast);}
   G.prev=R.vals;renderScore(R);renderObj(R);
   if(!silent&&R.cx.cfgDone&&!isSaved(G.st)&&!G.seen.saveTip){G.seen.saveTip=1;coach('Configuration complète. Reste à vérifier avec les <code>show</code> si ce n\'est pas fait, puis à sauvegarder : <code>write memory</code>. Sans ça, tout est perdu au prochain redémarrage.');}
@@ -1145,11 +1149,14 @@ function rescore(silent){
 function pctOf(R){return R.all?100:Math.min(99,Math.floor(R.total+1e-6));}
 function renderScore(R){var pc=pctOf(R);$('#pct').textContent=pc+' %';$('#fill').style.width=pc+'%';
   var nx=null;R.gs.some(function(g){if(g.checks.some(function(k){return R.vals[k.id]<1-1e-9;})){nx=g;return true;}return false;});
-  $('#next').innerHTML=nx?'Prochaine étape : <b>'+esc(nx.title)+'</b>':'<b>Tout est validé</b>';}
+  $('#next').innerHTML=nx?'Prochaine étape : <b>'+esc(gTitle(nx,R))+'</b>':'<b>Tout est validé</b>';}
+function gTitle(g,R){return g.rt&&g.checks.every(function(k){return R.vals[k.id]>=1-1e-9;})?g.rt:g.title;}
+function kLabel(k,v){return k.rl&&v>=1-1e-9?k.rl:k.label;}
+function kDet(k,v){return k.d&&(!k.rl||v>=1-1e-9)?k.d(G.st):null;}
 function renderObj(R){var h='';
   R.gs.forEach(function(g,gi){var got=0,max=0,done=true;g.checks.forEach(function(k){got+=k.pts*R.vals[k.id];max+=k.pts;if(R.vals[k.id]<1-1e-9)done=false;});
-    h+='<div class="grp'+(done?' done':'')+'"><div class="gh"><span class="gn">'+(done?'✓':(gi+1))+'</span><span class="gt">'+esc(g.title)+'</span><span class="gp">'+fmtPts(got).replace(' %','')+' / '+max+' %</span></div><ul class="ck">';
-    g.checks.forEach(function(k){var v=R.vals[k.id],cls=v>=1-1e-9?'ok':(v>0?'part':'');h+='<li class="'+cls+'"><span>'+esc(k.label)+'</span>'+(k.d?'<span class="dt">'+esc(k.d(G.st))+'</span>':'')+'</li>';});
+    h+='<div class="grp'+(done?' done':'')+'"><div class="gh"><span class="gn">'+(done?'✓':(gi+1))+'</span><span class="gt">'+esc(gTitle(g,R))+'</span><span class="gp">'+fmtPts(got).replace(' %','')+' / '+max+' %</span></div><ul class="ck">';
+    g.checks.forEach(function(k){var v=R.vals[k.id],cls=v>=1-1e-9?'ok':(v>0?'part':'');h+='<li class="'+cls+'"><span>'+esc(kLabel(k,v))+'</span>'+(kDet(k,v)?'<span class="dt">'+esc(kDet(k,v))+'</span>':'')+'</li>';});
     h+='</ul>'+(G.hints[g.id]?'<div class="hint">'+g.hint+'</div>':'<button class="hb" type="button" data-hint="'+g.id+'">Afficher un indice <span style="font-weight:600;color:var(--muted)">· −20 % des points</span></button>')+'</div>';});
   $('#p-obj').innerHTML=h;}
 function toast(m){var t=mk('div','toast '+m[0]);t.appendChild(mk('span',null,m[1]));t.appendChild(mk('b',null,m[2]));TOASTS.appendChild(t);
