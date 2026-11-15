@@ -1230,14 +1230,14 @@ function setFs(n){n=Math.max(11,Math.min(17,n));PREFS.fs=n;savePrefs();document.
    API_URL vide  → mode local : comptes et classement sur CET appareil uniquement.
    API_URL rempli → classement partagé (Google Apps Script, voir backend/README.md).
    ========================================================= */
-var API_URL='';
+var API_URL='https://script.google.com/macros/s/AKfycbxi94P3PDt_m3ygnXGEd9ju3zroFmsiAbWP4VPWDdzXMFHDNCYUOXVNBgQqqM10uQHt4w/exec';
 var LKEY='atelier-vlan:league';
 var CATALOG={};Object.keys(SC).forEach(function(k){CATALOG[chId(k)]=SC[k].pts;});
 var LG={rows:null,at:0,err:null,busy:false},HUB={tab:'ch'},PROJ=/^#classement/.test(location.hash),RT=null;
 function chId(ex){return /^\d+$/.test(String(ex))?'ex'+ex:String(ex);}
 function exOf(id){var m=/^ex(\d+)$/.exec(id);return m?+m[1]:id;}
 function award(base,hints){return Math.round(base*Math.max(0.4,1-0.2*(hints||0)));}
-function clean(s){return String(s||'').replace(/\s+/g,' ').trim().slice(0,30);}
+function clean(s){return String(s||'').replace(/\s+/g,' ').trim().replace(/^[=+\-@\s]+/,'').slice(0,30);}
 function nkey(s){return clean(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim();}
 function h32(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0).toString(36);}
 function boardFrom(players,solves){

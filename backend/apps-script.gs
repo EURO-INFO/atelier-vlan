@@ -47,25 +47,30 @@ function out_(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function clean_(s) { return String(s || '').replace(/\s+/g, ' ').trim().slice(0, 30); }
+// Les caractères = + - @ en tête sont retirés : Google Sheets les prendrait pour une formule.
+function clean_(s) { return String(s || '').replace(/\s+/g, ' ').trim().replace(/^[=+\-@\s]+/, '').slice(0, 30); }
 function key_(s) {
   return clean_(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]+/g, ' ').trim();
 }
 function hash_(k, pin) {
+  // Hexadécimal préfixé par « h » : jamais interprété comme formule ou nombre par Sheets.
   var d = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, SALT + '|' + k + '|' + pin, Utilities.Charset.UTF_8);
-  return Utilities.base64Encode(d);
+  return 'h' + d.map(function (b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('');
 }
 function award_(base, hints) { return Math.round(base * Math.max(0.4, 1 - 0.2 * (hints || 0))); }
 
-function sheet_(name, headers) {
+var TEXT_DONE = {};
+// textCols : colonnes forcées en texte brut (pseudos, clés, empreintes), pour éviter toute conversion automatique.
+function sheet_(name, headers, textCols) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName(name);
   if (!sh) { sh = ss.insertSheet(name); sh.appendRow(headers); sh.setFrozenRows(1); }
+  if (!TEXT_DONE[name]) { sh.getRange(textCols).setNumberFormat('@'); TEXT_DONE[name] = 1; }
   return sh;
 }
-function players_() { return sheet_('Joueurs', ['cle', 'pseudo', 'pin_hash', 'cree_le']); }
-function solves_() { return sheet_('Resolutions', ['date', 'cle', 'pseudo', 'challenge', 'os', 'indices', 'commandes', 'secondes', 'points']); }
+function players_() { return sheet_('Joueurs', ['cle', 'pseudo', 'pin_hash', 'cree_le'], 'A:C'); }
+function solves_() { return sheet_('Resolutions', ['date', 'cle', 'pseudo', 'challenge', 'os', 'indices', 'commandes', 'secondes', 'points'], 'B:E'); }
 function rows_(sh) { var n = sh.getLastRow(); return n < 2 ? [] : sh.getRange(2, 1, n - 1, sh.getLastColumn()).getValues(); }
 
 function idErr_(req) {
