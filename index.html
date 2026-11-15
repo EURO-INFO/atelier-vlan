@@ -382,7 +382,22 @@ function sortedV(cfg){return Object.keys(cfg.vlans).map(Number).sort(function(a,
 var G=null, PREFS={};
 try{PREFS=JSON.parse(localStorage.getItem(KEY+':prefs')||'{}')||{};}catch(e){PREFS={};}
 function savePrefs(){try{localStorage.setItem(KEY+':prefs',JSON.stringify(PREFS));}catch(e){}}
-function store(){if(!G)return;try{localStorage.setItem(KEY,JSON.stringify(G));}catch(e){}}
+/* Une sauvegarde par joueur × exercice × switch : on peut laisser plusieurs exercices en cours. */
+function slotKey(owner,ex,os){return KEY+':s:'+owner+':'+ex+':'+os;}
+function slotList(owner){var o=[],pre=KEY+':s:'+owner+':';try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf(pre)===0){var g=JSON.parse(localStorage.getItem(k));if(g&&g.v===1&&g.st&&SC[g.ex]&&!g.done)o.push(g);}}}catch(e){}
+  return o.sort(function(a,b){return (b.ts||0)-(a.ts||0);});}
+function slotGet(owner,ex,os){try{var g=JSON.parse(localStorage.getItem(slotKey(owner,ex,os)));return g&&g.v===1&&g.st&&g.sess&&SC[g.ex]&&!g.done?g:null;}catch(e){return null;}}
+function slotDel(owner,ex,os){try{localStorage.removeItem(slotKey(owner,ex,os));}catch(e){}}
+function store(){if(!G)return;
+  try{G.ts=Date.now();G.pct=pctOf(evalAll());}catch(e){}
+  var js=JSON.stringify(G);try{localStorage.setItem(KEY,js);}catch(e){}
+  if(!G.owner)return;
+  if(G.done){slotDel(G.owner,G.ex,G.os);return;}
+  if(!G.cmds)return;
+  var k=slotKey(G.owner,G.ex,G.os);
+  try{localStorage.setItem(k,js);}catch(e){ /* stockage plein : on libère les sauvegardes les plus anciennes */
+    var old=slotList(G.owner).filter(function(g){return !(g.ex===G.ex&&g.os===G.os);}).reverse();
+    for(var i=0;i<old.length;i++){slotDel(G.owner,old[i].ex,old[i].os);try{localStorage.setItem(k,js);return;}catch(e2){}}}}
 function restore(){try{var s=localStorage.getItem(KEY);if(!s)return null;var g=JSON.parse(s);if(!g||g.v!==1||!g.st||!g.sess)return null;return g;}catch(e){return null;}}
 function wipe(){try{localStorage.removeItem(KEY);}catch(e){}}
 
@@ -1194,7 +1209,19 @@ function renderAll(){
   rescore(true);updatePrompt();selTab(PREFS.tab||'mission');scrollEnd();
 }
 function newGame(os,ex,name){return {v:1,owner:PREFS.me?PREFS.me.key:null,claimed:null,os:os,ex:ex,name:name||'',st:SC[ex].init(os),sess:{mode:'exec',data:null,hist:[]},flags:{},prev:null,log:[],hints:{},cmds:0,t0:null,t1:null,done:false,seen:{},errStreak:0,pending:null};}
+function loadGame(g){
+  G=g;G.claimed=G.claimed||null;OUT.innerHTML='';TOASTS.innerHTML='';G.log.forEach(function(e){OUT.appendChild(renderEntry(e));});
+  ov('start',false);ov('done',false);ov('confirm',false);renderAll();store();
+  sys('Reprise de la partie : le switch est dans l\'état où tu l\'as laissé.');scrollEnd();
+  if(!isWide())openPanel('obj');else CMD.focus();
+}
+function openGame(os,ex){
+  if(G&&G.ex===ex&&G.os===os&&!G.done){ov('start',false);renderAll();if(!isWide())openPanel('mission');else CMD.focus();return;}
+  var g=PREFS.me?slotGet(PREFS.me.key,ex,os):null;
+  if(g)loadGame(g);else startGame(os,ex,PREFS.me?PREFS.me.name:'');
+}
 function startGame(os,ex,name){
+  if(PREFS.me)slotDel(PREFS.me.key,ex,os);
   G=newGame(os,ex,name);OUT.innerHTML='';TOASTS.innerHTML='';banner(false);
   G.prev=evalAll().vals;ov('start',false);ov('done',false);ov('confirm',false);
   renderAll();selTab('mission');store();
@@ -1312,13 +1339,20 @@ function renderClaim(){
 /* --- hub : parcours, challenges, classement --- */
 function selOs(){var i=document.querySelector('#h-os input:checked');return i?i.value:(PREFS.os||'cx');}
 function card(id,os){
-  var ex=exOf(id),S=SC[ex],b=bestFor(id,os),D=S.kind==='ch'?DIFF[S.diff]:null,
+  var ex=exOf(id),S=SC[ex],b=bestFor(id,os),cur=inProgress(ex,os),D=S.kind==='ch'?DIFF[S.diff]:null,
       lv=D?'<span class="lv lv'+S.diff+'">'+D.st+' '+D.lab+'</span>':'',
       sub=S.kind==='ch'?S.teaser:(ex===1?'3 VLAN, les ports, l\'uplink':'3 tickets à résoudre'),
       ttl=S.kind==='ch'?S.name:'Exercice '+ex+' · '+S.name;
-  return '<button type="button" class="chc'+(b!=null?' solved':'')+'" data-go="'+esc(id)+'"><span class="bd">'+lv+'<b>'+esc(ttl)+'</b><small>'+esc(sub)+'</small></span>'+
+  return '<button type="button" class="chc'+(b!=null?' solved':'')+'" data-go="'+esc(id)+'"><span class="bd">'+lv+'<b>'+esc(ttl)+'</b><small>'+esc(sub)+(cur?' · <b style="display:inline;font-size:inherit;color:var(--accent)">en cours, '+cur.pct+' %</b>':'')+'</small></span>'+
     '<span class="cpt">'+(b!=null?'✓ '+b:S.pts)+'<small>'+(b!=null?'/ '+S.pts+' pts':'pts')+'</small></span></button>';
 }
+function inProgress(ex,os){if(!PREFS.me)return null;if(G&&G.ex===ex&&G.os===os&&!G.done&&G.cmds)return {pct:pctOf(evalAll())};var g=slotGet(PREFS.me.key,ex,os);return g?{pct:g.pct||0}:null;}
+function resumeHTML(){
+  if(!PREFS.me)return '';var L=slotList(PREFS.me.key);
+  if(G&&!G.done&&G.cmds&&!L.some(function(g){return g.ex===G.ex&&g.os===G.os;}))L.unshift(G);
+  if(!L.length)return '';
+  return '<p class="lh">En cours · '+L.length+'</p><div class="list">'+L.slice(0,6).map(function(g){var pc=(G&&g.ex===G.ex&&g.os===G.os)?pctOf(evalAll()):(g.pct||0);
+    return '<button type="button" class="chc resume" data-res="'+esc(chId(g.ex))+'|'+g.os+'"><span class="bd"><b>Reprendre : '+esc(SC[g.ex].name)+'</b><small>'+OSL[g.os]+' · '+pc+' % · là où tu t\'es arrêté</small></span><span class="cpt">→</span></button>';}).join('')+'</div>';}
 function boardHTML(){
   var h='';
   if(!API_URL)h+='<div class="banner"><b>Mode local :</b> ce classement ne contient que les comptes créés sur cet appareil. Pour un classement commun à toute la salle, renseigner <code>API_URL</code> (voir backend/README.md).</div>';
@@ -1337,7 +1371,7 @@ function renderHub(){
   document.querySelectorAll('.hubtabs button').forEach(function(b){b.setAttribute('aria-selected',String(b.dataset.h===HUB.tab));});
   if(PREFS.me){$('#h-name').textContent=PREFS.me.name;$('#h-av').textContent=PREFS.me.name.charAt(0).toUpperCase();
     var rk=myRank();$('#h-sub').textContent=ptsTxt(myPts())+(rk&&LG.rows?' · '+rk+(rk===1?'er':'e')+' sur '+LG.rows.length:'')+(queue().some(function(q){return PREFS.me&&nkey(q.name)===PREFS.me.key;})?' · envoi en attente':'');}
-  if(HUB.tab!=='rk'&&G&&!G.done&&!PROJ)h+='<div class="list"><button type="button" class="chc resume" data-act="resume"><span class="bd"><b>Reprendre : '+esc(SC[G.ex].name)+'</b><small>'+OSL[G.os]+' · '+pctOf(evalAll())+' % · là où tu t\'es arrêté</small></span><span class="cpt">→</span></button></div>';
+  if(HUB.tab!=='rk'&&!PROJ)h+=resumeHTML();
   if(PROJ||HUB.tab==='rk')h+=boardHTML();
   else if(HUB.tab==='par')h+='<p class="lh">Parcours de formation · '+OSL[os]+'</p><div class="list">'+card('ex1',os)+card('ex2',os)+'</div><p class="fine">Les deux exercices de la séance. Points au premier succès, −20 % par indice affiché.</p>';
   else{[1,2,3,4].forEach(function(d){var ks=Object.keys(CHALLENGES).filter(function(k){return CHALLENGES[k].diff===d;});if(!ks.length)return;
@@ -1384,11 +1418,9 @@ document.querySelectorAll('.hubtabs button').forEach(function(b){b.addEventListe
 $('#h-os').addEventListener('change',function(){PREFS.os=selOs();savePrefs();syncOpts();renderHub();});
 $('#h-body').addEventListener('click',function(e){
   var go=e.target.closest('[data-go]'),act=e.target.closest('[data-act]');
-  if(go){var ex=exOf(go.dataset.go),os=selOs();PREFS.os=os;savePrefs();
-    if(G&&!G.done&&!(G.ex===ex&&G.os===os)&&G.cmds>0&&!confirm('Abandonner « '+SC[G.ex].name+' » en cours ?'))return;
-    if(G&&!G.done&&G.ex===ex&&G.os===os){ov('start',false);renderAll();if(!isWide())openPanel('mission');else CMD.focus();return;}
-    startGame(os,ex,PREFS.me?PREFS.me.name:'');return;}
-  if(act&&act.dataset.act==='resume'){ov('start',false);if(isWide())CMD.focus();return;}
+  var res=e.target.closest('[data-res]');
+  if(res){var pr=res.dataset.res.split('|');openGame(pr[1],exOf(pr[0]));return;}
+  if(go){var ex=exOf(go.dataset.go),os=selOs();PREFS.os=os;savePrefs();openGame(os,ex);return;}
   if(act&&act.dataset.act==='refresh')refreshBoard();
 });
 
@@ -1428,7 +1460,7 @@ window.addEventListener('resize',fit);fit();
 buildTrees();
 if(PREFS.fs)setFs(PREFS.fs);
 G=restore();
-if(G&&(!PREFS.me||G.owner!==PREFS.me.key||!SC[G.ex])){G=null;wipe();}
+if(G&&(!PREFS.me||G.owner!==PREFS.me.key||!SC[G.ex]||G.done)){G=null;wipe();}
 if(G){try{OUT.innerHTML='';G.log.forEach(function(e){OUT.appendChild(renderEntry(e));});renderAll();if(G.done)showDone();}catch(e){G=null;OUT.innerHTML='';}}
 leagueInit();
 window.__atelier={submit:function(s){submit(s);},state:function(){return G;},score:function(){return G?pctOf(evalAll()):null;},start:startGame};
