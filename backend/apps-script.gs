@@ -64,13 +64,13 @@ function sheet_(name, headers) {
   if (!sh) { sh = ss.insertSheet(name); sh.appendRow(headers); sh.setFrozenRows(1); }
   return sh;
 }
-function players_() { return sheet_('Joueurs', ['cle', 'prenom', 'pin_hash', 'cree_le']); }
-function solves_() { return sheet_('Resolutions', ['date', 'cle', 'prenom', 'challenge', 'os', 'indices', 'commandes', 'secondes', 'points']); }
+function players_() { return sheet_('Joueurs', ['cle', 'pseudo', 'pin_hash', 'cree_le']); }
+function solves_() { return sheet_('Resolutions', ['date', 'cle', 'pseudo', 'challenge', 'os', 'indices', 'commandes', 'secondes', 'points']); }
 function rows_(sh) { var n = sh.getLastRow(); return n < 2 ? [] : sh.getRange(2, 1, n - 1, sh.getLastColumn()).getValues(); }
 
 function idErr_(req) {
   var n = clean_(req.name);
-  if (n.length < 2 || !key_(n)) return 'Prénom trop court.';
+  if (n.length < 2 || !key_(n)) return 'Pseudo trop court (2 caractères minimum).';
   if (!/^\d{4}$/.test(String(req.pin || ''))) return 'Le code doit faire exactement 4 chiffres.';
   return null;
 }
@@ -84,7 +84,7 @@ function login_(req) {
   var e = idErr_(req); if (e) return { ok: false, err: e };
   var k = key_(req.name), p = findPlayer_(k), h = hash_(k, String(req.pin));
   if (p) return p.hash === h ? { ok: true, name: p.name, key: k }
-    : { ok: false, err: 'Code incorrect pour ce prénom. Homonyme ? Ajouter l\'initiale du nom.' };
+    : { ok: false, err: 'Code incorrect. Si ce pseudo n\'est pas le tien, en choisir un autre.' };
   var name = clean_(req.name);
   players_().appendRow([k, name, h, new Date()]);
   return { ok: true, name: name, key: k, created: true };

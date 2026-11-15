@@ -2,7 +2,7 @@
 
 Simulateur de switch Aruba (AOS-CX et AOS-S) en une seule page HTML, pour la formation interne VLAN niveau 1.
 
-- **Comptes** : prénom + code à 4 chiffres.
+- **Comptes** : pseudo + code à 4 chiffres.
 - **Parcours** : exercice 1 *Configurer* et exercice 2 *Dépanner*, 150 pts chacun.
 - **Challenges** : tickets de panne ou demandes de changement, de ★ Facile à ★★★★ Expert.
 - **Classement** : local à l'appareil par défaut, partagé une fois le backend configuré ([backend/README.md](backend/README.md)).

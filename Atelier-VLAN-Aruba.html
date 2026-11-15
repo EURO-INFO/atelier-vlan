@@ -307,8 +307,8 @@ body.proj .rk{width:38px;height:38px;font-size:17px}
       <span class="eyebrow">Formation interne · VLAN niveau 1</span>
       <h1>Atelier VLAN</h1>
       <p class="lead">Un switch Aruba dans le téléphone. Chaque exercice réussi et chaque ticket résolu rapporte des <b>points au classement</b>.</p>
-      <div class="lbl"><label for="f-name">Prénom</label> <span>(+ initiale du nom en cas d'homonyme)</span></div>
-      <input id="f-name" class="inp" type="text" autocomplete="given-name" maxlength="30" placeholder="ex. Julien M.">
+      <div class="lbl"><label for="f-name">Pseudo</label> <span>(affiché au classement)</span></div>
+      <input id="f-name" class="inp" type="text" autocomplete="nickname" maxlength="30" placeholder="ex. VlanMaster">
       <div class="lbl"><label for="f-pin">Code à 4 chiffres</label> <span>(choisi à la 1re connexion, à retenir)</span></div>
       <input id="f-pin" class="inp" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="••••">
       <p class="err" id="lg-err" role="alert"></p>
@@ -1249,14 +1249,14 @@ function boardFrom(players,solves){
 }
 function ldb(){try{var d=JSON.parse(localStorage.getItem(LKEY));if(d&&d.players&&d.solves)return d;}catch(e){}return {players:{},solves:[]};}
 function lput(d){try{localStorage.setItem(LKEY,JSON.stringify(d));}catch(e){}}
-function idErr(req){var n=clean(req.name);if(n.length<2||!nkey(n))return 'Prénom trop court.';if(!/^\d{4}$/.test(String(req.pin||'')))return 'Le code doit faire exactement 4 chiffres.';return null;}
+function idErr(req){var n=clean(req.name);if(n.length<2||!nkey(n))return 'Pseudo trop court (2 caractères minimum).';if(!/^\d{4}$/.test(String(req.pin||'')))return 'Le code doit faire exactement 4 chiffres.';return null;}
 function localCall(req){
   var d=ldb();
   if(req.action==='board')return {ok:true,rows:boardFrom(d.players,d.solves)};
   var e=idErr(req);if(e)return {ok:false,err:e};
   var k=nkey(req.name),P=d.players[k],ph=h32(k+':'+req.pin);
   if(req.action==='login'){
-    if(P)return P.pin===ph?{ok:true,name:P.name,key:k}:{ok:false,err:'Code incorrect pour ce prénom. Homonyme ? Ajouter l\'initiale du nom.'};
+    if(P)return P.pin===ph?{ok:true,name:P.name,key:k}:{ok:false,err:'Code incorrect. Si ce pseudo n\'est pas le tien, en choisir un autre.'};
     d.players[k]={name:clean(req.name),pin:ph,at:Date.now()};lput(d);return {ok:true,name:d.players[k].name,key:k,created:true};}
   if(!P||P.pin!==ph)return {ok:false,err:'Compte introuvable ou code changé : se reconnecter.',auth:true};
   if(req.action==='solve'){var base=CATALOG[req.ch];if(!base||(req.os!=='cx'&&req.os!=='aoss'))return {ok:false,err:'Challenge inconnu.'};
@@ -1344,13 +1344,13 @@ function renderHub(){
       h+='<p class="lh">'+DIFF[d].st+' '+DIFF[d].lab+' · '+DIFF[d].pts+' pts · '+OSL[os]+'</p><div class="list">'+ks.map(function(k){return card(k,os);}).join('')+'</div>';});
     h+='<p class="fine">Les points comptent une fois par challenge et par switch (AOS-CX et AOS-S séparément). Rejouer est permis : seul le meilleur score est gardé.</p>';}
   body.innerHTML=h;
-  $('#h-foot').textContent=API_URL?'Classement partagé : prénom et points visibles par tous les participants.':'Mode local : rien n\'est envoyé, tout reste sur cet appareil.';
+  $('#h-foot').textContent=API_URL?'Classement partagé : pseudo et points visibles par tous les participants.':'Mode local : rien n\'est envoyé, tout reste sur cet appareil.';
 }
 function paintLeague(){var n=myPts();$('#hub-pts').textContent=n;if(!$('#v-hub').hidden&&!$('#ov-start').hidden)renderHub();renderClaim();}
 function showLogin(msg){
   $('#v-login').hidden=false;$('#v-hub').hidden=true;$('#lg-err').textContent=msg||'';
   $('#f-name').value=(PREFS.me&&PREFS.me.name)||PREFS.name||'';$('#f-pin').value='';
-  $('#lg-mode').textContent=API_URL?'Classement partagé : ton prénom et tes points seront visibles par les autres participants.':'Mode local : comptes et classement restent sur cet appareil.';
+  $('#lg-mode').textContent=API_URL?'Classement partagé : ton pseudo et tes points seront visibles par les autres participants.':'Mode local : comptes et classement restent sur cet appareil.';
   ov('done',false);ov('confirm',false);ov('start',true);
 }
 function showHub(tab){
