@@ -228,13 +228,32 @@ kbd{font-size:12px;background:var(--soft-2);color:var(--brand);border-radius:8px
 .dn-pts{font-size:30px;font-weight:800;color:var(--accent);margin:2px 0 4px;font-variant-numeric:tabular-nums}
 .dn-pts small{display:block;font-size:13px;font-weight:700;color:var(--muted)}
 .projt{display:none}
-body.proj .projt{display:block;font-size:34px;color:var(--brand);margin:0 0 6px}
-body.proj .ov.start{background:var(--bg)}
-body.proj .ov.start .card{max-width:900px}
-body.proj .hub-h,body.proj .hubtabs,body.proj .oslbl,body.proj #h-os,body.proj .hub-foot{display:none}
-body.proj .board{font-size:20px}
-body.proj .board td{padding:12px 8px}
-body.proj .rk{width:38px;height:38px;font-size:17px}
+/* Mode projection (#classement) : plein écran, tout doit tenir sans défilement (taille ajustée par fitProj) */
+body.proj .ov.start{background:var(--bg);display:block;overflow:hidden}
+body.proj .ov.start .card{max-width:none;width:100%;height:100%;max-height:none;overflow:hidden;border-radius:0;box-shadow:none;background:var(--bg);padding:2.5vh 3vw}
+body.proj .ov.start .inner{max-width:none;height:100%}
+body.proj .hub-h,body.proj .hubtabs,body.proj .oslbl,body.proj #h-os,body.proj .hub-foot,body.proj .projt{display:none}
+.pj{font-size:var(--pf,20px);color:var(--fg)}
+.pj-h{display:flex;align-items:baseline;justify-content:space-between;gap:1em;margin:0 0 .6em}
+.pj-h b{font-size:1.9em;color:var(--brand);line-height:1.1}
+.pj-h span{font-size:.75em;color:var(--muted);white-space:nowrap}
+.pod{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.8em;margin:0 0 .8em}
+.pc{border-radius:1.1em;padding:.7em .9em;background:var(--soft);display:flex;align-items:center;gap:.7em;min-width:0;overflow:hidden}
+.pc .rk{width:2.2em;height:2.2em;font-size:1.05em;flex:0 0 auto}
+.pc .w{min-width:0}
+.pc b{display:block;font-size:1.2em;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg)}
+.pc span{font-size:.75em;color:var(--muted)}
+.pc .p{display:block;font-weight:800;font-size:1.5em;line-height:1.15;color:var(--brand);white-space:nowrap;font-variant-numeric:tabular-nums}
+.pc .w span.s{font-size:.7em;color:var(--muted)}
+.pl.nc .n{display:none}
+.pc.c1{background:var(--accent-soft);outline:.12em solid #D99A06}
+.pl{column-gap:2.2em}
+.pr{display:flex;align-items:center;gap:.6em;padding:.28em 0;border-bottom:1px solid var(--line);break-inside:avoid}
+.pr .rk{width:1.6em;height:1.6em;font-size:.75em;flex:0 0 auto}
+.pr .nm{flex:1;min-width:0;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pr .n{font-size:.7em;color:var(--muted);white-space:nowrap}
+.pr .p{font-weight:800;color:var(--brand);white-space:nowrap;font-variant-numeric:tabular-nums;min-width:4.6em;text-align:right}
+.pr.z{opacity:.6}
 
 @media (max-width:979px){
   .panel{position:fixed;inset:0;z-index:40;transform:translateY(105%);transition:transform .28s ease;padding-top:env(safe-area-inset-top,0px);visibility:hidden}
@@ -1360,6 +1379,29 @@ function resumeHTML(){
   if(!L.length)return '';
   return '<p class="lh">En cours · '+L.length+'</p><div class="list">'+L.slice(0,6).map(function(g){var pc=(G&&g.ex===G.ex&&g.os===G.os)?pctOf(evalAll()):(g.pct||0);
     return '<button type="button" class="chc resume" data-res="'+esc(chId(g.ex))+'|'+g.os+'"><span class="bd"><b>Reprendre : '+esc(SC[g.ex].name)+'</b><small>'+OSL[g.os]+' · '+pc+' % · là où tu t\'es arrêté</small></span><span class="cpt">→</span></button>';}).join('')+'</div>';}
+function projHTML(){
+  var R=LG.rows,h='';
+  var t=LG.at?new Date(LG.at).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):'—';
+  h+='<div class="pj" id="pj"><div class="pj-h"><b>Classement · Atelier VLAN</b><span>'+(R?R.length+' joueur'+(R.length>1?'s':'')+' · ':'')+'mis à jour à '+t+'</span></div>';
+  if(!API_URL)h+='<div class="banner">Mode local : seuls les comptes de cet appareil apparaissent.</div>';
+  if(LG.err)h+='<div class="banner">'+esc(LG.err)+'</div>';
+  if(!R)return h+'<p class="empty">Chargement du classement…</p></div>';
+  if(!R.length)return h+'<p class="empty">Personne n\'est encore inscrit.</p></div>';
+  function sub(r){return r.n+' résolu'+(r.n>1?'s':'');}
+  var top=R.slice(0,3),rest=R.slice(3);
+  h+='<div class="pod">'+top.map(function(r,i){return '<div class="pc'+(i===0&&r.pts>0?' c1':'')+'"><span class="rk'+(r.pts>0?' g'+(i+1):'')+'">'+(i+1)+'</span><span class="w"><b>'+esc(r.name)+'</b><span class="p">'+ptsTxt(r.pts)+'</span><span class="s">'+sub(r)+'</span></span></div>';}).join('')+'</div>';
+  if(rest.length){var cols=rest.length<=10?1:rest.length<=36?2:3;
+    h+='<div class="pl'+(cols>2?' nc':'')+'" style="columns:'+cols+'">'+rest.map(function(r,i){return '<div class="pr'+(r.pts?'':' z')+'"><span class="rk">'+(i+4)+'</span><span class="nm">'+esc(r.name)+'</span><span class="n">'+sub(r)+'</span><span class="p">'+ptsTxt(r.pts)+'</span></div>';}).join('')+'</div>';}
+  return h+'</div>';
+}
+/* Ajuste la taille du texte pour que tout le classement tienne dans l'écran, quel que soit le nombre de joueurs */
+function fitProj(){
+  var el=$('#pj');if(!PROJ||!el)return;
+  var card=$('#ov-start .card'),cs=getComputedStyle(card),H=card.clientHeight-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom),
+      W=card.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight),f=Math.min(H/14,W/34,40);
+  for(var i=0;i<40;i++){el.style.setProperty('--pf',f+'px');if((el.scrollHeight<=H+2&&el.scrollWidth<=W+2)||f<=8)break;f*=0.94;}
+}
+window.addEventListener('resize',function(){if(PROJ)fitProj();});
 function boardHTML(){
   var h='';
   if(!API_URL)h+='<div class="banner"><b>Mode local :</b> ce classement ne contient que les comptes créés sur cet appareil. Pour un classement commun à toute la salle, renseigner <code>API_URL</code> (voir backend/README.md).</div>';
@@ -1379,12 +1421,13 @@ function renderHub(){
   if(PREFS.me){$('#h-name').textContent=PREFS.me.name;$('#h-av').textContent=PREFS.me.name.charAt(0).toUpperCase();
     var rk=myRank();$('#h-sub').textContent=ptsTxt(myPts())+(rk&&LG.rows?' · '+rk+(rk===1?'er':'e')+' sur '+LG.rows.length:'')+(queue().some(function(q){return PREFS.me&&nkey(q.name)===PREFS.me.key;})?' · envoi en attente':'');}
   if(HUB.tab!=='rk'&&!PROJ)h+=resumeHTML();
-  if(PROJ||HUB.tab==='rk')h+=boardHTML();
+  if(PROJ)h+=projHTML();
+  else if(HUB.tab==='rk')h+=boardHTML();
   else if(HUB.tab==='par')h+='<p class="lh">Parcours de formation · '+OSL[os]+'</p><div class="list">'+card('ex1',os)+card('ex2',os)+'</div><p class="fine">Les deux exercices de la séance. Points au premier succès, −20 % par indice affiché.</p>';
   else{[1,2,3,4].forEach(function(d){var ks=Object.keys(CHALLENGES).filter(function(k){return CHALLENGES[k].diff===d;});if(!ks.length)return;
       h+='<p class="lh">'+DIFF[d].st+' '+DIFF[d].lab+' · '+DIFF[d].pts+' pts · '+OSL[os]+'</p><div class="list">'+ks.map(function(k){return card(k,os);}).join('')+'</div>';});
     h+='<p class="fine">Les points comptent une fois par challenge et par switch (AOS-CX et AOS-S séparément). Rejouer est permis : seul le meilleur score est gardé.</p>';}
-  body.innerHTML=h;
+  body.innerHTML=h;if(PROJ)fitProj();
   $('#h-foot').textContent=API_URL?'Classement partagé : pseudo et points visibles par tous les participants.':'Mode local : rien n\'est envoyé, tout reste sur cet appareil.';
 }
 function paintLeague(){var n=myPts();$('#hub-pts').textContent=n;if(!$('#v-hub').hidden&&!$('#ov-start').hidden)renderHub();renderClaim();}
